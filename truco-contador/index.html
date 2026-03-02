@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Contador Truco (UY)</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app" class="app">
+
+    <!-- ====== SCREEN: NUEVA PARTIDA ====== -->
+    <section id="screenStart" class="screen screen--active">
+      <header class="topLogo">
+        <div class="logoFake">
+          <div class="logoTop">YERBA MATE</div>
+          <div class="logoMain">ARMIÑO</div>
+        </div>
+      </header>
+
+      <main class="panelStart">
+        <h1 class="titleBig">NUEVA<br>PARTIDA</h1>
+        <div class="divider"></div>
+
+        <div class="fieldBlock">
+          <div class="fieldLabel">EQUIPO 1</div>
+          <div class="fieldRow">
+            <input id="teamAInput" class="fieldInput" type="text" value="NOSOTROS" maxlength="20" />
+            <button class="fieldClear" id="clearA" aria-label="Borrar">×</button>
+          </div>
+        </div>
+
+        <div class="fieldBlock">
+          <div class="fieldLabel">EQUIPO 2</div>
+          <div class="fieldRow">
+            <input id="teamBInput" class="fieldInput" type="text" value="ELLOS" maxlength="20" />
+            <button class="fieldClear" id="clearB" aria-label="Borrar">×</button>
+          </div>
+        </div>
+
+        <div class="fieldBlock">
+          <div class="fieldLabel">PARTIDA A</div>
+          <div class="selectRow">
+            <select id="targetSelect" class="fieldSelect">
+              <option value="10">10 TANTOS</option>
+              <option value="20">20 TANTOS</option>
+              <option value="30">30 TANTOS</option>
+              <option value="40" selected>40 TANTOS</option>
+              <option value="50">50 TANTOS</option>
+              <option value="60">60 TANTOS</option>
+            </select>
+          </div>
+        </div>
+
+        <button id="startBtn" class="btnPrimary">Empezar</button>
+      </main>
+    </section>
+
+    <!-- ====== SCREEN: JUEGO ====== -->
+    <section id="screenGame" class="screen">
+      <header class="topBar">
+        <button id="newGameBtn" class="topBtn">
+          <span class="topIcon">🗂</span>
+          <span>Nueva</span>
+        </button>
+
+        <div class="logoFake logoFake--small">
+          <div class="logoTop">YERBA MATE</div>
+          <div class="logoMain">ARMIÑO</div>
+        </div>
+
+        <button id="rulesBtn" class="topBtn">
+          <span class="topIcon">📜</span>
+          <span>Reglas</span>
+        </button>
+      </header>
+
+      <main class="boardWrap">
+        <div class="board">
+          <div class="boardHeader">
+            <div id="teamATitle" class="teamTitle">NOSOTROS</div>
+            <div id="teamBTitle" class="teamTitle teamTitle--right">ELLOS</div>
+          </div>
+
+          <div class="boardGrid" id="boardGrid">
+            <!-- Área A -->
+            <div id="touchA" class="touchArea touchArea--left" role="button" aria-label="Sumar punto Nosotros">
+              <div class="marks" id="marksA"></div>
+            </div>
+
+            <!-- Línea vertical -->
+            <div class="vLine"></div>
+
+            <!-- Área B -->
+            <div id="touchB" class="touchArea touchArea--right" role="button" aria-label="Sumar punto Ellos">
+              <div class="marks" id="marksB"></div>
+            </div>
+
+            <!-- Línea horizontal en mitad del puntaje -->
+            <div id="halfLine" class="hLine"></div>
+          </div>
+
+          <div class="bottomBar">
+            <button id="minusA" class="minusBtn" aria-label="Restar punto Nosotros">−</button>
+            <button id="minusB" class="minusBtn" aria-label="Restar punto Ellos">−</button>
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- ====== SCREEN: REGLAS ====== -->
+    <section id="screenRules" class="screen">
+      <header class="rulesHeader">
+        <button id="backFromRules" class="backBtn">← Volver</button>
+        <div class="rulesTitle">Reglas</div>
+      </header>
+
+      <main class="rulesMain">
+        <div class="searchBox">
+          <span class="searchIcon">🔎</span>
+          <input id="rulesSearch" type="text" placeholder="Buscar" />
+        </div>
+
+        <div class="rulesCard">
+          <div class="rulesSection">
+
+            <button class="rulesRow rulesRow--big" data-toggle="reglas">
+              <span>REGLAS</span>
+              <span class="chev" id="chevReglas">›</span>
+            </button>
+
+            <div id="submenuReglas" class="submenu">
+              <button class="submenuRow" data-open="tactica">Táctica y objetivo <span>›</span></button>
+              <button class="submenuRow" data-open="modo">Modo de Juego <span>›</span></button>
+              <button class="submenuRow" data-open="jugadores">Jugadores <span>›</span></button>
+              <button class="submenuRow" data-open="cartas">Cartas <span>›</span></button>
+              <button class="submenuRow" data-open="envido">Valor del Envido <span>›</span></button>
+              <button class="submenuRow" data-open="flor">Valor de la Flor <span>›</span></button>
+            </div>
+
+            <div class="rulesDivider"></div>
+
+            <button class="rulesRow rulesRow--big" data-open="senas">
+              <span>SEÑAS</span>
+              <span class="chev">›</span>
+            </button>
+
+            <div class="rulesDivider"></div>
+
+            <button class="rulesRow rulesRow--big" data-open="versos">
+              <span>VERSOS</span>
+              <span class="chev">›</span>
+            </button>
+
+          </div>
+        </div>
+      </main>
+    </section>
+
+    <!-- ====== SCREEN: DETALLE REGLA ====== -->
+    <section id="screenRuleDetail" class="screen">
+      <header class="rulesHeader">
+        <button id="backFromDetail" class="backBtn">← Volver</button>
+        <div id="detailTitle" class="rulesTitle">Detalle</div>
+      </header>
+
+      <main class="detailMain">
+        <div class="detailCard">
+          <div id="detailContent" class="detailContent"></div>
+        </div>
+      </main>
+    </section>
+
+    <!-- ====== MODAL GANADOR ====== -->
+    <div id="winnerModal" class="modalOverlay" aria-hidden="true">
+      <div class="modal">
+        <div class="modalTitle">Confirmar ganador</div>
+        <div id="winnerText" class="modalText">¿El equipo ganador es?</div>
+        <div class="modalBtns">
+          <button id="winnerNo" class="modalBtn modalBtn--ghost">No</button>
+          <button id="winnerYes" class="modalBtn">Si</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
