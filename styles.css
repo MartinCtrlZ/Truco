@@ -249,11 +249,35 @@ body{
   opacity:.6;
 }
 .tallyMarks{
-  height:44px;
-  flex:1;
-  display:flex;
-  align-items:center;
-  gap:8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;            /* separación entre palitos */
+  position: relative;
+  min-height: 28px;
+}
+
+.mark{
+  width: 6px;
+  height: 26px;
+  border-radius: 6px;
+  background: rgba(0,0,0,.55);
+}
+
+.fiveGroup{
+  position: relative;
+  padding-right: 10px;
+}
+
+.fiveGroup .diag{
+  position: absolute;
+  left: -2px;
+  top: 12px;
+  width: 52px;
+  height: 6px;
+  border-radius: 6px;
+  background: rgba(0,0,0,.55);
+  transform: rotate(-24deg);
+  transform-origin: left center;
 }
 
 /* Cada punto es un palito, y cada 5 se “cierra” en caja */

@@ -162,27 +162,51 @@ function positionDividerH(){
 function renderTally(container, points){
   container.innerHTML = "";
 
-  for (let i = 1; i <= points; i++){
+  const groups = Math.floor(points / 5);
+  const rest = points % 5;
+
+  // Grupos completos de 5
+  for (let g = 0; g < groups; g++){
     const row = document.createElement("div");
     row.className = "tallyRow";
 
     const num = document.createElement("div");
     num.className = "tallyNum";
-    num.textContent = i;
+    num.textContent = (g + 1) * 5; // muestra 5,10,15...
+
+    const marks = document.createElement("div");
+    marks.className = "tallyMarks fiveGroup";
+
+    // 4 palitos
+    for (let i = 0; i < 4; i++){
+      const m = document.createElement("div");
+      m.className = "mark";
+      marks.appendChild(m);
+    }
+
+    // diagonal del 5
+    const diag = document.createElement("div");
+    diag.className = "diag";
+    marks.appendChild(diag);
+
+    row.appendChild(num);
+    row.appendChild(marks);
+    container.appendChild(row);
+  }
+
+  // Último grupo incompleto (1–4)
+  if (rest > 0){
+    const row = document.createElement("div");
+    row.className = "tallyRow";
+
+    const num = document.createElement("div");
+    num.className = "tallyNum";
+    num.textContent = groups * 5 + rest; // total actual
 
     const marks = document.createElement("div");
     marks.className = "tallyMarks";
 
-    const mod = i % 5;
-
-    if (mod === 0){
-      const box = document.createElement("div");
-      box.className = "box";
-      const diag = document.createElement("div");
-      diag.className = "boxDiag";
-      box.appendChild(diag);
-      marks.appendChild(box);
-    } else {
+    for (let i = 0; i < rest; i++){
       const m = document.createElement("div");
       m.className = "mark";
       marks.appendChild(m);
