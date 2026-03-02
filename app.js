@@ -11,10 +11,7 @@ import {
   serverTimestamp, enableIndexedDbPersistence
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-
-// Your web app's Firebase configuration
+// ✅ Tu config
 const firebaseConfig = {
   apiKey: "AIzaSyA54j6ll16nc_wu-ZmtlZmO5JLaxmUIcUI",
   authDomain: "truco-a2f51.firebaseapp.com",
@@ -24,18 +21,23 @@ const firebaseConfig = {
   appId: "1:639389569561:web:5b138fae6c25f7374f1088"
 };
 
+// ✅ Variables (NO uses "app" para no pisarte nombres)
+let fbApp = null, auth = null, db = null;
+let currentUser = null;
+
 function initFirebase() {
-  // Si no pegaste config, no rompe la app
-  if (!firebaseConfig || firebaseConfig.apiKey === "PEGAR_ACA") return;
+  // Si no hay config real, no rompe
+  if (!firebaseConfig || !firebaseConfig.apiKey) return;
 
-  app = initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = getFirestore(app);
+  // Evita inicializar 2 veces
+  if (fbApp) return;
 
-  // ✅ "Cache" Firestore offline
-  enableIndexedDbPersistence(db).catch(() => {
-    // puede fallar si hay otra pestaña abierta, etc. No pasa nada.
-  });
+  fbApp = initializeApp(firebaseConfig);
+  auth = getAuth(fbApp);
+  db = getFirestore(fbApp);
+
+  // ✅ Firestore offline (cache)
+  enableIndexedDbPersistence(db).catch(() => {});
 
   onAuthStateChanged(auth, (user) => {
     currentUser = user || null;
@@ -44,6 +46,11 @@ function initFirebase() {
   });
 }
 initFirebase();
+
+// ------------------- Anti zoom (doble tap) -------------------
+document.addEventListener("dblclick", (e) => {
+  e.preventDefault();
+}, { passive: false });
 
 // ------------------- UI Helpers -------------------
 const $ = (id) => document.getElementById(id);
@@ -67,7 +74,6 @@ $("startBtn").addEventListener("click", () => {
   const t1 = ($("team1Input").value || "NOSOTROS").trim();
   const t2 = ($("team2Input").value || "ELLOS").trim();
   const target = parseInt($("targetSelect").value, 10);
-
   startGame(t1, t2, target);
 });
 
@@ -121,11 +127,8 @@ function addPoint(team){
   if (team === 1) points1++;
   else points2++;
 
-  // Si llega al final, confirmar
   const winner = checkWinner();
   if (winner){
-    // si el equipo tocó el último tanto, mostramos modal y si el usuario dice "No"
-    // se elimina ese último punto
     openWinnerModal(winner);
     return;
   }
@@ -148,13 +151,10 @@ function checkWinner(){
 // ------------------- Divider H dynamic -------------------
 function positionDividerH(){
   const mid = targetPoints / 2; // 10->5, 40->20, 60->30
-  const board = document.querySelector(".board");
   const h = $("dividerH");
 
-  // Cada "fila visual" la hacemos de 54px aprox (coincide con el alto de row)
   const rowHeight = 54;
-  const y = 82 + (mid * rowHeight); 
-  // 82 es un offset para que caiga dentro del área de conteo (ajuste visual)
+  const y = 82 + (mid * rowHeight);
   h.style.top = `${y}px`;
 }
 
@@ -162,7 +162,6 @@ function positionDividerH(){
 function renderTally(container, points){
   container.innerHTML = "";
 
-  // mostramos 1 "fila" por punto, con agrupación visual cada 5 en "caja"
   for (let i = 1; i <= points; i++){
     const row = document.createElement("div");
     row.className = "tallyRow";
@@ -176,7 +175,6 @@ function renderTally(container, points){
 
     const mod = i % 5;
 
-    // Para el punto 5,10,15... dibujamos una “caja” con diagonal
     if (mod === 0){
       const box = document.createElement("div");
       box.className = "box";
@@ -185,7 +183,6 @@ function renderTally(container, points){
       box.appendChild(diag);
       marks.appendChild(box);
     } else {
-      // para 1-4 dibuja palitos
       const m = document.createElement("div");
       m.className = "mark";
       marks.appendChild(m);
@@ -209,14 +206,12 @@ let pendingWinner = null;
 
 function openWinnerModal(winnerTeam){
   pendingWinner = winnerTeam;
-
   const winnerName = winnerTeam === 1 ? team1 : team2;
   $("winnerText").textContent = `¿El equipo ganador es ${winnerName}?`;
   winnerModal.classList.remove("hidden");
 }
 
 $("winnerNo").addEventListener("click", () => {
-  // cancelar: elimina el último punto del equipo que “ganó”
   if (pendingWinner === 1) points1 = Math.max(0, points1 - 1);
   if (pendingWinner === 2) points2 = Math.max(0, points2 - 1);
 
@@ -230,12 +225,10 @@ $("winnerYes").addEventListener("click", async () => {
   pendingWinner = null;
   winnerModal.classList.add("hidden");
 
-  // Guardar historial
   const winnerName = (w === 1) ? team1 : team2;
   const result = `${points1}-${points2}`;
   await saveMatch(winnerName, result);
 
-  // volver a inicio
   showScreen("start");
 });
 
@@ -250,10 +243,10 @@ const rulesData = {
     { title:"Valor de la Flor", text:`Se suma el valor de las 3 cartas. Si hay más de una pieza: se toma el valor completo de la más alta y del resto se suma solo el último dígito. Las “negras” (10, 11 y 12 que no son de la muestra) suman 0. Máximo: 47 (2, 4 y 5 de la muestra).`}
   ],
   senas: [
-    { title:"Señas", text:"(Acá podés pegar tus señas cuando me las pases y lo dejo armado igual que Reglas.)" }
+    { title:"Señas", text:"(Pegá acá tus señas cuando me las pases.)" }
   ],
   versos: [
-    { title:"Versos", text:"(Acá podés pegar tus versos cuando me los pases y lo dejo armado.)" }
+    { title:"Versos", text:"(Pegá acá tus versos cuando me los pases.)" }
   ]
 };
 
@@ -317,7 +310,7 @@ function refreshAuthUI(){
   const status = $("authStatus");
 
   if (!auth){
-    status.textContent = "Firebase no está configurado todavía (pegá el firebaseConfig).";
+    status.textContent = "Firebase no está listo.";
     $("logoutBtn").classList.add("hidden");
     return;
   }
@@ -362,7 +355,6 @@ $("logoutBtn").addEventListener("click", async () => {
 
 // ------------------- History (Firestore) -------------------
 async function saveMatch(winnerName, result){
-  // Si no hay firebase o no hay user, guardamos local
   const payload = {
     winner: winnerName,
     result,
@@ -381,9 +373,7 @@ async function saveMatch(winnerName, result){
       result,
       createdAt: serverTimestamp()
     });
-  }catch(e){
-    // si falla, igual ya lo guardó local
-  }
+  }catch(e){}
 }
 
 function formatDate(d){
@@ -397,7 +387,6 @@ function formatDate(d){
 async function refreshHistoryUI(){
   const box = $("historyBox");
 
-  // si no firebase o no user, mostrar local
   if (!db || !currentUser){
     const local = JSON.parse(localStorage.getItem("truco_history") || "[]");
     if (!local.length){
@@ -417,7 +406,6 @@ async function refreshHistoryUI(){
     return;
   }
 
-  // Firebase history
   try{
     const q = query(
       collection(db, "users", currentUser.uid, "matches"),
@@ -461,7 +449,7 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-// Primer render por si entran directo
+// Primer render
 renderAll();
 showScreen("start");
 refreshAuthUI();
