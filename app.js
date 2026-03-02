@@ -1,379 +1,467 @@
-/* ========= Estado ========= */
-const state = {
-  teamA: "NOSOTROS",
-  teamB: "ELLOS",
-  target: 40,
-  scoreA: 0,
-  scoreB: 0,
-  pendingWinner: null, // "A" o "B"
+// app.js (MODULE)
+
+// ------------------- Firebase (Auth + Firestore) -------------------
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+import {
+  getAuth, onAuthStateChanged,
+  signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+import {
+  getFirestore, collection, addDoc, query, orderBy, limit, getDocs,
+  serverTimestamp, enableIndexedDbPersistence
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyA54j6ll16nc_wu-ZmtlZmO5JLaxmUIcUI",
+  authDomain: "truco-a2f51.firebaseapp.com",
+  projectId: "truco-a2f51",
+  storageBucket: "truco-a2f51.firebasestorage.app",
+  messagingSenderId: "639389569561",
+  appId: "1:639389569561:web:5b138fae6c25f7374f1088"
 };
 
-/* ========= Helpers ========= */
-function $(id){ return document.getElementById(id); }
+function initFirebase() {
+  // Si no pegaste config, no rompe la app
+  if (!firebaseConfig || firebaseConfig.apiKey === "PEGAR_ACA") return;
 
-function clamp(n, min, max){
-  return Math.max(min, Math.min(max, n));
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+
+  // ✅ "Cache" Firestore offline
+  enableIndexedDbPersistence(db).catch(() => {
+    // puede fallar si hay otra pestaña abierta, etc. No pasa nada.
+  });
+
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user || null;
+    refreshAuthUI();
+    refreshHistoryUI();
+  });
 }
+initFirebase();
 
-function showScreen(screenId){
-  const screens = ["screenStart","screenGame","screenRules","screenRuleDetail"];
-  screens.forEach(id => $(id).classList.toggle("screen--active", id === screenId));
-}
+// ------------------- UI Helpers -------------------
+const $ = (id) => document.getElementById(id);
 
-function saveSettings(){
-  const data = {
-    teamA: state.teamA,
-    teamB: state.teamB,
-    target: state.target,
-  };
-  localStorage.setItem("trucoUY_settings", JSON.stringify(data));
-}
-
-function loadSettings(){
-  try{
-    const raw = localStorage.getItem("trucoUY_settings");
-    if(!raw) return;
-    const data = JSON.parse(raw);
-    if(typeof data.teamA === "string") state.teamA = data.teamA.toUpperCase();
-    if(typeof data.teamB === "string") state.teamB = data.teamB.toUpperCase();
-    if(typeof data.target === "number") state.target = data.target;
-  }catch(e){ /* nada */ }
-}
-
-function resetGame(){
-  state.scoreA = 0;
-  state.scoreB = 0;
-  state.pendingWinner = null;
-  renderGame();
-}
-
-/* ========= Marcas (tally estilo tu ejemplo) =========
-   Grupo de 5:
-   1-4 dibujan lados del cuadrado (en "palitos")
-   5 dibuja diagonal (cierra el look del cuadrado)
-*/
-function buildMarksSVG(points, isLeft){
-  const groups = Math.ceil(points / 5);
-  const maxGroups = Math.ceil(state.target / 5); // máximo visual
-  const useGroups = Math.max(groups, 1);
-
-  // Grid: 1 columna de grupos apilados (simple y limpio)
-  const width = 160;
-  const height = 700; // se escala con viewBox
-
-  const svgNS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(svgNS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  svg.setAttribute("width", "100%");
-  svg.setAttribute("height", "100%");
-
-  // Parámetros de cada grupo
-  const groupSize = 70;
-  const gap = 18;
-  const startY = 20;
-  const startX = isLeft ? 16 : 16;
-
-  function line(x1,y1,x2,y2, w=8){
-    const l = document.createElementNS(svgNS, "line");
-    l.setAttribute("x1", x1);
-    l.setAttribute("y1", y1);
-    l.setAttribute("x2", x2);
-    l.setAttribute("y2", y2);
-    l.setAttribute("stroke", "#1a63b8");
-    l.setAttribute("stroke-width", w);
-    l.setAttribute("stroke-linecap", "round");
-    return l;
-  }
-
-  // dibuja hasta el target (si querés limitar, cambiá acá)
-  const capped = clamp(points, 0, state.target);
-
-  for(let g=0; g<Math.max(useGroups, maxGroups); g++){
-    const groupTop = startY + g * (groupSize + gap);
-
-    // cuántos puntos tiene este grupo
-    const base = g*5;
-    const inGroup = clamp(capped - base, 0, 5);
-
-    // Coordenadas del "cuadrado"
-    const x = startX + (isLeft ? 0 : 0);
-    const y = groupTop;
-    const s = groupSize;
-
-    // 1: lado izquierdo (arriba a abajo)
-    // 2: lado superior (izq a der)
-    // 3: lado derecho (arriba a abajo)
-    // 4: lado inferior (izq a der)
-    // 5: diagonal (arriba-izq a abajo-der)
-    if(inGroup >= 1) svg.appendChild(line(x, y+6, x, y+s-6));
-    if(inGroup >= 2) svg.appendChild(line(x+6, y, x+s-6, y));
-    if(inGroup >= 3) svg.appendChild(line(x+s, y+6, x+s, y+s-6));
-    if(inGroup >= 4) svg.appendChild(line(x+6, y+s, x+s-6, y+s));
-    if(inGroup >= 5) svg.appendChild(line(x+10, y+10, x+s-10, y+s-10));
-
-    // Si el grupo está vacío, no dibujamos nada (queda limpio)
-    // pero dejamos el espacio para que el layout sea estable.
-  }
-
-  return svg;
-}
-
-function renderHalfLine(){
-  // línea horizontal en la mitad del puntaje objetivo
-  // Ej: 40 -> mitad 20 (50% del alto del tablero)
-  // Como el tablero es visual, la dejamos centrada (50%).
-  // Si querés que cambie según objetivo (igual siempre es la mitad), queda 50%.
-  const halfLine = $("halfLine");
-  halfLine.style.top = "50%";
-}
-
-function renderGame(){
-  $("teamATitle").textContent = state.teamA;
-  $("teamBTitle").textContent = state.teamB;
-
-  // Render marcas
-  const marksA = $("marksA");
-  const marksB = $("marksB");
-  marksA.innerHTML = "";
-  marksB.innerHTML = "";
-  marksA.appendChild(buildMarksSVG(state.scoreA, true));
-  marksB.appendChild(buildMarksSVG(state.scoreB, false));
-
-  renderHalfLine();
-}
-
-function openWinnerModal(winnerSide){
-  state.pendingWinner = winnerSide;
-  const name = winnerSide === "A" ? state.teamA : state.teamB;
-  $("winnerText").textContent = `¿El equipo ganador es ${name}?`;
-  $("winnerModal").classList.add("modalOverlay--open");
-  $("winnerModal").setAttribute("aria-hidden","false");
-}
-
-function closeWinnerModal(){
-  $("winnerModal").classList.remove("modalOverlay--open");
-  $("winnerModal").setAttribute("aria-hidden","true");
-}
-
-/* ========= Reglas (contenido) ========= */
-const rulesContent = {
-  tactica: {
-    title: "Táctica y objetivo",
-    html: `
-      <h2>Táctica y objetivo</h2>
-      <p>El objetivo del juego es alcanzar primero un número acordado previamente de puntos (normalmente 30 o 40).</p>
-      <p>El puntaje se divide generalmente en malas y buenas. Por ejemplo, en un partido a 30 puntos, las primeras 15 se denominan "malas" y las segundas 15 son las "buenas".</p>
-    `
-  },
-  modo: {
-    title: "Modo de Juego",
-    html: `
-      <h2>Modo de Juego</h2>
-      <p>Se reparten 3 cartas a cada jugador y se da vuelta una carta, que se denomina “muestra”. Se juega por “manos” y se otorgan puntos por “flor” o “envido” y “truco”.</p>
-      <p>Aquel que tire la carta con el valor más alto en la mano, gana la mano. El mejor de tres manos gana la ronda y los puntos que esta valga, dependiendo de los cantos, envíos o gritos que se hayan realizado.</p>
-      <p>El jugador situado a la derecha de quien repartió las cartas es quien empieza a jugar, luego el siguiente y así sucesivamente.</p>
-      <p>El jugador que haya ganado la mano empieza la segunda ronda, y el equipo que perdió la primera debe obligatoriamente ganar la segunda.</p>
-      <p>Los puntos del juego se ganan en función de alguna de 3 instancias o todas: “Envido”, “Flor” y/o “Truco”.</p>
-      <ul>
-        <li><b>Envido:</b> Envido / Real Envido / Falta Envido.</li>
-        <li><b>Flor:</b> Flor / Con Flor Envido / Contra Flor al Resto.</li>
-        <li><b>Truco:</b> Truco / Retruco / Vale Cuatro.</li>
-      </ul>
-    `
-  },
-  jugadores: {
-    title: "Jugadores",
-    html: `
-      <h2>Jugadores</h2>
-      <p><b>Juego 1 contra 1</b></p>
-      <p><b>Juego en equipos</b></p>
-      <ul>
-        <li>4 jugadores: 2 contra 2</li>
-        <li>6 jugadores: 3 contra 3</li>
-      </ul>
-      <p>Las reglas son las mismas, con la diferencia de que para ganar cada mano, la carta que cuenta es la carta más alta jugada por cada miembro de la pareja.</p>
-      <p>Cuando se juega de 6, mientras se está en “malas”, se alternan los turnos en rondas de 3 contra 3 y de 1 contra 1 (pico a pico), uno a la vez.</p>
-    `
-  },
-  cartas: {
-    title: "Cartas",
-    html: `
-      <h2>Cartas</h2>
-      <p>El truco se juega con una baraja española sin ochos, sin nueves ni comodines. Las cartas tienen una jerarquía determinada.</p>
-      <p><b>Piezas</b> (según la muestra): 2 (30), 4 (29), 5 (28), 11 (27), 10 (27).</p>
-      <p><b>Matas</b>: 1 de Espadas, 1 de Bastos, 7 de Espadas, 7 de Oros.</p>
-      <p>El resto coincide con su valor nominal excepto los 10, 11 y 12. Los 10, 11 y 12 (si no son de la muestra) valen 0 y se denominan “negras”.</p>
-    `
-  },
-  envido: {
-    title: "Valor del Envido",
-    html: `
-      <h2>Valor del Envido</h2>
-      <p><b>Cómo conocer el valor del Envido</b></p>
-      <p>Si se tiene una pieza, es el valor de la pieza más la carta más alta de las otras dos. Ej: 4 de la muestra (29) + 5 = 34.</p>
-      <p>En caso de no tener pieza, si se tienen 2 cartas del mismo palo, se suman y al resultado se le suman 20. Ej: 7 de basto + 5 de basto + 20 = 32.</p>
-      <p>Si no se tiene pieza y las 3 cartas son de distinto palo, el valor del envido es la carta más alta.</p>
-      <p>El envido máximo posible es 37 (2 de la muestra y un 7).</p>
-    `
-  },
-  flor: {
-    title: "Valor de la Flor",
-    html: `
-      <h2>Valor de la Flor</h2>
-      <p><b>Cómo conocer el valor de la Flor</b></p>
-      <p>El puntaje de la FLOR se realiza sumando el valor de las 3 cartas.</p>
-      <p>Si se tiene más de una pieza, se toma el valor completo de la más alta, y del resto de las piezas suma solamente el último dígito. Las “negras” (10, 11 y 12 que no son de la muestra) suman 0.</p>
-      <p>Ejemplo: 2 y 5 de la muestra + 10 de otro palo → 30 + 8 + 0.</p>
-      <p>El máximo puntaje de la FLOR es 47 (2, 4 y 5 de la muestra: 30 + 9 + 8).</p>
-    `
-  },
-  senas: {
-    title: "Señas",
-    html: `
-      <h2>Señas</h2>
-      <p>Dejé esta sección lista para que me pases el contenido y te la cargo igual que “Reglas”.</p>
-    `
-  },
-  versos: {
-    title: "Versos",
-    html: `
-      <h2>Versos</h2>
-      <p>Dejé esta sección lista para que me pases el contenido y te la cargo igual que “Reglas”.</p>
-    `
-  }
+const screens = {
+  start: $("screenStart"),
+  game: $("screenGame"),
+  rules: $("screenRules")
 };
 
-function openDetail(key){
-  const item = rulesContent[key];
-  if(!item) return;
-  $("detailTitle").textContent = item.title;
-  $("detailContent").innerHTML = item.html;
-  showScreen("screenRuleDetail");
+function showScreen(name){
+  Object.values(screens).forEach(s => s.classList.add("hidden"));
+  screens[name].classList.remove("hidden");
 }
 
-function applyRulesSearch(q){
-  const query = (q || "").trim().toLowerCase();
-  const rows = Array.from(document.querySelectorAll(".rulesRow, .submenuRow"));
-  rows.forEach(el => {
-    const text = el.innerText.toLowerCase();
-    el.style.display = text.includes(query) ? "" : "none";
-  });
+// ------------------- Start Screen -------------------
+$("clearTeam1").addEventListener("click", () => $("team1Input").value = "");
+$("clearTeam2").addEventListener("click", () => $("team2Input").value = "");
 
-  // si busca algo, abrimos submenu para que lo vea
-  if(query){
-    $("submenuReglas").classList.add("submenu--open");
-    $("chevReglas").textContent = "⌄";
+$("startBtn").addEventListener("click", () => {
+  const t1 = ($("team1Input").value || "NOSOTROS").trim();
+  const t2 = ($("team2Input").value || "ELLOS").trim();
+  const target = parseInt($("targetSelect").value, 10);
+
+  startGame(t1, t2, target);
+});
+
+// ------------------- Game State -------------------
+let team1 = "NOSOTROS";
+let team2 = "ELLOS";
+let targetPoints = 40;
+let points1 = 0;
+let points2 = 0;
+
+function startGame(t1, t2, target){
+  team1 = t1.toUpperCase();
+  team2 = t2.toUpperCase();
+  targetPoints = target;
+  points1 = 0;
+  points2 = 0;
+
+  $("team1Name").textContent = team1;
+  $("team2Name").textContent = team2;
+
+  renderAll();
+  showScreen("game");
+}
+
+$("newBtn").addEventListener("click", () => showScreen("start"));
+$("rulesBtn").addEventListener("click", () => {
+  showScreen("rules");
+  showRulesMenu();
+});
+
+// Edit names in game
+$("editTeam1").addEventListener("click", () => {
+  const n = prompt("Nuevo nombre para equipo 1:", team1) || team1;
+  team1 = n.trim().slice(0,18).toUpperCase();
+  $("team1Name").textContent = team1;
+});
+$("editTeam2").addEventListener("click", () => {
+  const n = prompt("Nuevo nombre para equipo 2:", team2) || team2;
+  team2 = n.trim().slice(0,18).toUpperCase();
+  $("team2Name").textContent = team2;
+});
+
+// Tap areas to add points
+$("col1").addEventListener("click", () => addPoint(1));
+$("col2").addEventListener("click", () => addPoint(2));
+
+$("minus1").addEventListener("click", (e) => { e.stopPropagation(); removePoint(1); });
+$("minus2").addEventListener("click", (e) => { e.stopPropagation(); removePoint(2); });
+
+function addPoint(team){
+  if (team === 1) points1++;
+  else points2++;
+
+  // Si llega al final, confirmar
+  const winner = checkWinner();
+  if (winner){
+    // si el equipo tocó el último tanto, mostramos modal y si el usuario dice "No"
+    // se elimina ese último punto
+    openWinnerModal(winner);
+    return;
+  }
+
+  renderAll();
+}
+
+function removePoint(team){
+  if (team === 1) points1 = Math.max(0, points1 - 1);
+  else points2 = Math.max(0, points2 - 1);
+  renderAll();
+}
+
+function checkWinner(){
+  if (points1 >= targetPoints) return 1;
+  if (points2 >= targetPoints) return 2;
+  return null;
+}
+
+// ------------------- Divider H dynamic -------------------
+function positionDividerH(){
+  const mid = targetPoints / 2; // 10->5, 40->20, 60->30
+  const board = document.querySelector(".board");
+  const h = $("dividerH");
+
+  // Cada "fila visual" la hacemos de 54px aprox (coincide con el alto de row)
+  const rowHeight = 54;
+  const y = 82 + (mid * rowHeight); 
+  // 82 es un offset para que caiga dentro del área de conteo (ajuste visual)
+  h.style.top = `${y}px`;
+}
+
+// ------------------- Tally render -------------------
+function renderTally(container, points){
+  container.innerHTML = "";
+
+  // mostramos 1 "fila" por punto, con agrupación visual cada 5 en "caja"
+  for (let i = 1; i <= points; i++){
+    const row = document.createElement("div");
+    row.className = "tallyRow";
+
+    const num = document.createElement("div");
+    num.className = "tallyNum";
+    num.textContent = i;
+
+    const marks = document.createElement("div");
+    marks.className = "tallyMarks";
+
+    const mod = i % 5;
+
+    // Para el punto 5,10,15... dibujamos una “caja” con diagonal
+    if (mod === 0){
+      const box = document.createElement("div");
+      box.className = "box";
+      const diag = document.createElement("div");
+      diag.className = "boxDiag";
+      box.appendChild(diag);
+      marks.appendChild(box);
+    } else {
+      // para 1-4 dibuja palitos
+      const m = document.createElement("div");
+      m.className = "mark";
+      marks.appendChild(m);
+    }
+
+    row.appendChild(num);
+    row.appendChild(marks);
+    container.appendChild(row);
   }
 }
 
-/* ========= Eventos ========= */
-function init(){
-  loadSettings();
+function renderAll(){
+  renderTally($("tally1"), points1);
+  renderTally($("tally2"), points2);
+  positionDividerH();
+}
 
-  // Start screen - set values
-  $("teamAInput").value = state.teamA;
-  $("teamBInput").value = state.teamB;
-  $("targetSelect").value = String(state.target);
+// ------------------- Winner modal -------------------
+const winnerModal = $("winnerModal");
+let pendingWinner = null;
 
-  $("clearA").addEventListener("click", () => { $("teamAInput").value = ""; $("teamAInput").focus(); });
-  $("clearB").addEventListener("click", () => { $("teamBInput").value = ""; $("teamBInput").focus(); });
+function openWinnerModal(winnerTeam){
+  pendingWinner = winnerTeam;
 
-  $("startBtn").addEventListener("click", () => {
-    const a = ($("teamAInput").value || "NOSOTROS").trim().toUpperCase();
-    const b = ($("teamBInput").value || "ELLOS").trim().toUpperCase();
-    const t = Number($("targetSelect").value) || 40;
+  const winnerName = winnerTeam === 1 ? team1 : team2;
+  $("winnerText").textContent = `¿El equipo ganador es ${winnerName}?`;
+  winnerModal.classList.remove("hidden");
+}
 
-    state.teamA = a;
-    state.teamB = b;
-    state.target = t;
+$("winnerNo").addEventListener("click", () => {
+  // cancelar: elimina el último punto del equipo que “ganó”
+  if (pendingWinner === 1) points1 = Math.max(0, points1 - 1);
+  if (pendingWinner === 2) points2 = Math.max(0, points2 - 1);
 
-    saveSettings();
-    resetGame();
+  pendingWinner = null;
+  winnerModal.classList.add("hidden");
+  renderAll();
+});
 
-    showScreen("screenGame");
-  });
+$("winnerYes").addEventListener("click", async () => {
+  const w = pendingWinner;
+  pendingWinner = null;
+  winnerModal.classList.add("hidden");
 
-  // Game - Nav
-  $("newGameBtn").addEventListener("click", () => {
-    showScreen("screenStart");
-  });
+  // Guardar historial
+  const winnerName = (w === 1) ? team1 : team2;
+  const result = `${points1}-${points2}`;
+  await saveMatch(winnerName, result);
 
-  $("rulesBtn").addEventListener("click", () => {
-    showScreen("screenRules");
-  });
+  // volver a inicio
+  showScreen("start");
+});
 
-  // Touch areas add point
-  function addPoint(side){
-    if(side === "A"){
-      state.scoreA = clamp(state.scoreA + 1, 0, state.target);
-      renderGame();
-      if(state.scoreA === state.target){
-        openWinnerModal("A");
-      }
-    }else{
-      state.scoreB = clamp(state.scoreB + 1, 0, state.target);
-      renderGame();
-      if(state.scoreB === state.target){
-        openWinnerModal("B");
-      }
-    }
-  }
+// ------------------- Rules -------------------
+const rulesData = {
+  reglas: [
+    { title:"Táctica y objetivo", text:`El objetivo del juego es alcanzar primero un número acordado previamente de puntos (normalmente 30 o 40). El puntaje se divide generalmente en malas y buenas. Por ejemplo, en un partido a 30 puntos, las primeras 15 se denominan “malas” y las segundas 15 son las “buenas”.`},
+    { title:"Modo de Juego", text:`Se reparten 3 cartas a cada jugador y se da vuelta una carta, que se denomina “muestra”. Se juega por “manos” y se otorgan puntos por “flor” o “envido” y “truco”. El mejor de tres manos gana la ronda.`},
+    { title:"Jugadores", text:`Juego 1 contra 1. Juego en equipos: 4 jugadores (2 contra 2) o 6 jugadores (3 contra 3). Las reglas son las mismas, pero para ganar cada mano cuenta la carta más alta jugada por cada miembro de la pareja.`},
+    { title:"Cartas", text:`El truco se juega con baraja española sin ochos, sin nueves ni comodines. Hay jerarquía de cartas, “piezas” y “matas”.`},
+    { title:"Valor del Envido", text:`Si se tiene una pieza: valor de la pieza + carta más alta de las otras dos. Si no hay pieza y hay 2 cartas del mismo palo: se suman y se le suman 20. Si las 3 son de distinto palo: vale la carta más alta. Máximo: 37 (2 de la muestra y un 7).`},
+    { title:"Valor de la Flor", text:`Se suma el valor de las 3 cartas. Si hay más de una pieza: se toma el valor completo de la más alta y del resto se suma solo el último dígito. Las “negras” (10, 11 y 12 que no son de la muestra) suman 0. Máximo: 47 (2, 4 y 5 de la muestra).`}
+  ],
+  senas: [
+    { title:"Señas", text:"(Acá podés pegar tus señas cuando me las pases y lo dejo armado igual que Reglas.)" }
+  ],
+  versos: [
+    { title:"Versos", text:"(Acá podés pegar tus versos cuando me los pases y lo dejo armado.)" }
+  ]
+};
 
-  function minusPoint(side){
-    if(side === "A"){
-      state.scoreA = clamp(state.scoreA - 1, 0, state.target);
-    }else{
-      state.scoreB = clamp(state.scoreB - 1, 0, state.target);
-    }
-    renderGame();
-  }
+function showRulesMenu(){
+  $("rulesContent").classList.add("hidden");
+  document.querySelector(".rulesMenu").classList.remove("hidden");
+}
 
-  // Importante: que sea toda el área táctil
-  $("touchA").addEventListener("pointerdown", (e) => { e.preventDefault(); addPoint("A"); });
-  $("touchB").addEventListener("pointerdown", (e) => { e.preventDefault(); addPoint("B"); });
+function showRulesList(section){
+  document.querySelector(".rulesMenu").classList.add("hidden");
+  $("rulesContent").classList.remove("hidden");
+  $("rulesContentTitle").textContent = section.toUpperCase();
 
-  $("minusA").addEventListener("click", () => minusPoint("A"));
-  $("minusB").addEventListener("click", () => minusPoint("B"));
+  const list = $("rulesList");
+  list.innerHTML = "";
 
-  // Modal ganador
-  $("winnerYes").addEventListener("click", () => {
-    closeWinnerModal();
-    showScreen("screenStart");
-  });
-
-  $("winnerNo").addEventListener("click", () => {
-    // si el usuario dice "No", eliminamos ese último punto y seguimos
-    if(state.pendingWinner === "A") state.scoreA = clamp(state.scoreA - 1, 0, state.target);
-    if(state.pendingWinner === "B") state.scoreB = clamp(state.scoreB - 1, 0, state.target);
-    state.pendingWinner = null;
-    closeWinnerModal();
-    renderGame();
-  });
-
-  // Rules screen
-  $("backFromRules").addEventListener("click", () => showScreen("screenGame"));
-  $("backFromDetail").addEventListener("click", () => showScreen("screenRules"));
-
-  // Toggle submenu reglas
-  document.querySelector('[data-toggle="reglas"]').addEventListener("click", () => {
-    const sub = $("submenuReglas");
-    const open = sub.classList.toggle("submenu--open");
-    $("chevReglas").textContent = open ? "⌄" : "›";
-  });
-
-  // abrir detalle desde submenu + secciones
-  document.querySelectorAll("[data-open]").forEach(btn => {
+  rulesData[section].forEach(item => {
+    const btn = document.createElement("button");
+    btn.className = "ruleLink";
+    btn.innerHTML = `<span>${item.title}</span><span>›</span>`;
     btn.addEventListener("click", () => {
-      const key = btn.getAttribute("data-open");
-      openDetail(key);
+      alert(`${item.title}\n\n${item.text}`);
     });
+    list.appendChild(btn);
   });
-
-  // buscador
-  $("rulesSearch").addEventListener("input", (e) => applyRulesSearch(e.target.value));
-
-  // inicial render
-  renderGame();
 }
 
-init();
+document.querySelectorAll(".rulesItem").forEach(btn => {
+  btn.addEventListener("click", () => showRulesList(btn.dataset.section));
+});
+
+$("rulesBackToMenu").addEventListener("click", showRulesMenu);
+$("backFromRules").addEventListener("click", () => showScreen("game"));
+
+// ------------------- Auth modal -------------------
+const authModal = $("authModal");
+
+$("authBtn").addEventListener("click", () => {
+  authModal.classList.remove("hidden");
+  selectTab("access");
+});
+
+$("closeAuth").addEventListener("click", () => authModal.classList.add("hidden"));
+
+// Tabs
+document.querySelectorAll(".tabBtn").forEach(b => {
+  b.addEventListener("click", () => selectTab(b.dataset.tab));
+});
+
+function selectTab(tab){
+  document.querySelectorAll(".tabBtn").forEach(b => b.classList.remove("active"));
+  document.querySelector(`.tabBtn[data-tab="${tab}"]`).classList.add("active");
+
+  $("tab_access").classList.toggle("hidden", tab !== "access");
+  $("tab_history").classList.toggle("hidden", tab !== "history");
+
+  if (tab === "history") refreshHistoryUI();
+}
+
+function refreshAuthUI(){
+  const status = $("authStatus");
+
+  if (!auth){
+    status.textContent = "Firebase no está configurado todavía (pegá el firebaseConfig).";
+    $("logoutBtn").classList.add("hidden");
+    return;
+  }
+
+  if (currentUser){
+    status.textContent = `Conectado: ${currentUser.email}`;
+    $("logoutBtn").classList.remove("hidden");
+  } else {
+    status.textContent = "No hay sesión iniciada.";
+    $("logoutBtn").classList.add("hidden");
+  }
+}
+
+$("loginBtn").addEventListener("click", async () => {
+  if (!auth) return;
+  const email = $("emailInput").value.trim();
+  const pass = $("passInput").value;
+
+  try{
+    await signInWithEmailAndPassword(auth, email, pass);
+  }catch(e){
+    $("authStatus").textContent = "Error al entrar: " + (e?.message || e);
+  }
+});
+
+$("registerBtn").addEventListener("click", async () => {
+  if (!auth) return;
+  const email = $("emailInput").value.trim();
+  const pass = $("passInput").value;
+
+  try{
+    await createUserWithEmailAndPassword(auth, email, pass);
+  }catch(e){
+    $("authStatus").textContent = "Error al crear cuenta: " + (e?.message || e);
+  }
+});
+
+$("logoutBtn").addEventListener("click", async () => {
+  if (!auth) return;
+  await signOut(auth);
+});
+
+// ------------------- History (Firestore) -------------------
+async function saveMatch(winnerName, result){
+  // Si no hay firebase o no hay user, guardamos local
+  const payload = {
+    winner: winnerName,
+    result,
+    dateISO: new Date().toISOString()
+  };
+
+  const local = JSON.parse(localStorage.getItem("truco_history") || "[]");
+  local.unshift(payload);
+  localStorage.setItem("truco_history", JSON.stringify(local.slice(0,50)));
+
+  if (!db || !currentUser) return;
+
+  try{
+    await addDoc(collection(db, "users", currentUser.uid, "matches"), {
+      winner: winnerName,
+      result,
+      createdAt: serverTimestamp()
+    });
+  }catch(e){
+    // si falla, igual ya lo guardó local
+  }
+}
+
+function formatDate(d){
+  try{
+    return new Intl.DateTimeFormat("es-UY", { dateStyle:"short", timeStyle:"short" }).format(d);
+  }catch{
+    return d.toLocaleString();
+  }
+}
+
+async function refreshHistoryUI(){
+  const box = $("historyBox");
+
+  // si no firebase o no user, mostrar local
+  if (!db || !currentUser){
+    const local = JSON.parse(localStorage.getItem("truco_history") || "[]");
+    if (!local.length){
+      box.innerHTML = `<div class="muted">Sin historial todavía.</div>`;
+      return;
+    }
+    box.innerHTML = local.map(it => {
+      const d = formatDate(new Date(it.dateISO));
+      return `
+        <div class="historyItem">
+          <div><b>Ganador:</b> ${it.winner}</div>
+          <div><b>Resultado:</b> ${it.result}</div>
+          <div class="muted">${d}</div>
+        </div>
+      `;
+    }).join("");
+    return;
+  }
+
+  // Firebase history
+  try{
+    const q = query(
+      collection(db, "users", currentUser.uid, "matches"),
+      orderBy("createdAt", "desc"),
+      limit(30)
+    );
+    const snap = await getDocs(q);
+
+    if (snap.empty){
+      box.innerHTML = `<div class="muted">Sin historial todavía.</div>`;
+      return;
+    }
+
+    const items = [];
+    snap.forEach(doc => {
+      const data = doc.data();
+      const ts = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
+      items.push({
+        winner: data.winner,
+        result: data.result,
+        date: formatDate(ts)
+      });
+    });
+
+    box.innerHTML = items.map(it => `
+      <div class="historyItem">
+        <div><b>Ganador:</b> ${it.winner}</div>
+        <div><b>Resultado:</b> ${it.result}</div>
+        <div class="muted">${it.date}</div>
+      </div>
+    `).join("");
+  }catch(e){
+    box.innerHTML = `<div class="muted">No se pudo cargar historial.</div>`;
+  }
+}
+
+// ------------------- Service Worker (cache assets) -------------------
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
+
+// Primer render por si entran directo
+renderAll();
+showScreen("start");
+refreshAuthUI();
